@@ -1,12 +1,28 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { supabase } from '@/lib/supabase'; // Import our new database connection
+import { supabase } from '@/lib/supabase';
+
+// 1. Define the shape of the incoming data for TypeScript
+interface BookingRequest {
+  customer: {
+    name: string;
+    phone: string;
+  };
+  vehicle: {
+    year: string;
+    make: string;
+    model: string;
+  };
+  services: string[];
+  date: string;
+  slot: string;
+}
 
 export async function POST(req: Request) {
   try {
-    const data = await req.json();
+    const data: BookingRequest = await req.json();
 
-    // 1. SAVE TO SUPABASE FIRST
+    // 2. SAVE TO SUPABASE
     const { error: dbError } = await supabase
       .from('appointments')
       .insert([
@@ -19,16 +35,24 @@ export async function POST(req: Request) {
           services: data.services,
           appointment_date: data.date,
           time_slot: data.slot,
-          // 'status' and 'created_at' will auto-fill based on our SQL setup!
+          status: 'pending'
         }
       ]);
 
+    // CHECK FOR RACE CONDITION (Duplicate Booking)
     if (dbError) {
+      // PostgREST error code '23505' means Unique Constraint Violation
+      if (dbError.code === '23505') {
+        return NextResponse.json(
+          { error: 'This time slot was just taken by another customer.' },
+          { status: 409 }
+        );
+      }
       console.error('Database Error:', dbError);
       throw new Error('Failed to save to database');
     }
 
-    // 2. CONFIGURE NODEMAILER (Same as before)
+    // 3. CONFIGURE NODEMAILER
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -39,10 +63,14 @@ export async function POST(req: Request) {
 
     const dateObj = new Date(data.date);
     const formattedDate = dateObj.toLocaleDateString('en-US', { 
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      timeZone: 'UTC' // Ensures the date doesn't shift due to local server time
     });
 
-    // 3. SEND THE EMAIL (Same as before)
+    // 4. SEND THE EMAIL
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.FRONTDESK_EMAIL,
@@ -74,11 +102,13 @@ export async function POST(req: Request) {
 
     await transporter.sendMail(mailOptions);
 
-    // 4. RETURN SUCCESS
     return NextResponse.json({ success: true, message: 'Booking saved and email sent' });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('API Route Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Internal Server Error' }, 
+      { status: 500 }
+    );
   }
 }
