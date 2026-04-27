@@ -86,10 +86,10 @@ export default function DateTimeStep() {
                 mode="single"
                 selected={date}
                 onSelect={handleDateSelect}
-                disabled={(date) => {
-                   const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
-                   const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                   return isPast || isWeekend;
+                disabled={(date: Date) => {
+                const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
+                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                return isPast || isWeekend;
                 }}
                 initialFocus
               />
