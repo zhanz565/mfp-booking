@@ -18,6 +18,7 @@ const SERVICES = [
   "Not Starting",
   "Warning Light on Dash",
   "Scheduled Maintenance",
+  "Detailing"
 ] as const; 
 
 export default function ServiceStep() {
